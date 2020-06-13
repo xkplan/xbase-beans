@@ -1,0 +1,5 @@
+name: XBase-Beans
+main: cn.mmind.xbase.beans.Plugin
+version: 1.0.0
+api-version: 1.15
+author: prime_youlan
