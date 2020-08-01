@@ -1,0 +1,13 @@
+#####################################
+# beans:                            #
+#   name:                           #
+#     scope: <singleton|prototype>  #
+#     class: xxx.xxx.xxx            #
+#     property:                     #
+#       prop1: xxx                  #
+#       prop2:                      #
+#         value: xxx                #
+#       prop3:                      #
+#         ref: xxx                  #
+#       ...                         #
+#####################################

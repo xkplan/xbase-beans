@@ -7,17 +7,24 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.*;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
+/**
+ * 暂不支持 prototype 类型的 bean
+ */
 public class BeanFactory {
+    private static final Object lock = new Object();
     private static final String BEANS_FILE_NAME = "beans.yml";
-    private Map<String, Object> beans = new HashMap<>();
+    private static volatile YamlConfiguration configuration;
+    private Map<String, Object> earlySingletonBeans = new HashMap<>();
+    private Map<String, Object> singletonBeans = new HashMap<>();
+    private Map<String, BeanDefinition> definitions = new HashMap<>();
     private static BeanFactory instance = new BeanFactory();
     private ConverterService converterService;
 
@@ -58,53 +65,125 @@ public class BeanFactory {
                 throw new RuntimeException(e);
             }
         }
-        loadExtJar(file.getParentFile());
-        loadBean(file.getParentFile());
+        try {
+            loadExtJar(file.getParentFile());
+            loadBeanProperties(new File(file.getParentFile(), BEANS_FILE_NAME));
+            initialSingletonBeans();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     /**
-     * 加载磁盘配置文件
+     * 加载磁盘配置文件<br>
+     * 将 singleton 的 bean 初始化（未赋值）一份<br>
+     * 存入 earlySingletonBeans
      */
-    private void loadBean(File folder) {
-        try (InputStreamReader reader = new InputStreamReader(new FileInputStream(new File(folder, BEANS_FILE_NAME)), StandardCharsets.UTF_8)) {
-            YamlConfiguration config = YamlConfiguration.loadConfiguration(reader);
-            ConfigurationSection beansSection = config.getConfigurationSection("beans");
-            if (beansSection != null) {
-                for (String beanName : beansSection.getKeys(false)) {
-                    String sClazz = beansSection.getString(beanName + ".class");
-                    try {
-                        Class<?> clazz = Class.forName(sClazz);
-                        Constructor<?> constructor = clazz.getDeclaredConstructor();
-                        constructor.setAccessible(true);
-                        Object bean = constructor.newInstance();
-                        ConfigurationSection propertySection = beansSection.getConfigurationSection(beanName + ".property");
-                        if (propertySection != null) {
-                            for (String prop : propertySection.getKeys(false)) {
-                                StringBuilder kb = new StringBuilder(prop);
-                                if (kb.charAt(0) >= 'a' && kb.charAt(0) <= 'z')
-                                    kb.setCharAt(0, (char) (kb.charAt(0) - 32));
-                                kb.insert(0, "set");
-                                String methodName = kb.toString();
-                                Method setter = null;
-                                for (Method m : clazz.getMethods()) {
-                                    if (m.getName().equals(methodName)) {
-                                        setter = m;
-                                        break;
-                                    }
-                                }
-                                if (setter == null) throw new RuntimeException("找不到属性 setter 方法：" + methodName);
-                                setter.invoke(bean, converterService.convert(propertySection.getString(prop), setter.getParameterTypes()[0]));
-//                                doSetter(setter, bean, propertySection.getString(prop));
-                            }
-                        }
-                        beans.put(beanName, bean);
-                    } catch (Exception e) {
+    private void loadBeanProperties(File file) {
+        if (configuration == null) {
+            synchronized (lock) {
+                if (configuration == null) {
+                    try (InputStreamReader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
+                        configuration = YamlConfiguration.loadConfiguration(reader);
+                    } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
             }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        }
+        YamlConfiguration config = configuration;
+        ConfigurationSection beansSection = config.getConfigurationSection("beans");
+        if (beansSection != null) {
+            for (String beanName : beansSection.getKeys(false)) {
+                BeanDefinition bd = new BeanDefinition();
+                String sClazz = beansSection.getString(beanName + ".class");
+                String scope = beansSection.getString(beanName + ".scope", "SINGLETON");
+                assert scope != null;
+                bd.setName(beanName);
+                bd.setClazz(sClazz);
+                bd.setScope(BeanScope.valueOf(scope.toUpperCase()));
+                try {
+                    Map<String, String> props = new HashMap<>();
+                    Map<String, String> referenceProps = new HashMap<>();
+                    ConfigurationSection propertySection = beansSection.getConfigurationSection(beanName + ".property");
+                    if (propertySection != null) {
+                        for (String prop : propertySection.getKeys(false)) {
+                            if (propertySection.isString(prop)) {
+                                // 省略值写法
+                                String value = propertySection.getString(prop);
+                                props.put(prop, value);
+                            } else {
+                                if (propertySection.contains(prop + ".value")) {
+                                    String value = propertySection.getString(prop + ".value");
+                                    props.put(prop, value);
+                                } else if (propertySection.contains(prop + ".value")) {
+                                    String ref = propertySection.getString(prop + ".ref");
+                                    referenceProps.put(prop, ref);
+                                }
+                            }
+                        }
+                    }
+                    bd.setProps(props);
+                    bd.setReferenceProps(referenceProps);
+                    if (bd.getScope() == BeanScope.SINGLETON) {
+                        Object bean = constructBean(sClazz);
+                        earlySingletonBeans.put(bd.getName(), bean);
+                    }
+                    if (definitions.containsKey(bd.getName()))
+                        throw new IllegalStateException("Bean [" + bd.getName() + "] 已存在！");
+                    definitions.put(beanName, bd);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    /**
+     * 创建一个 Bean 空对象
+     *
+     * @param sClazz 全类名
+     * @return
+     * @throws ReflectiveOperationException
+     */
+    private Object constructBean(String sClazz) throws ReflectiveOperationException {
+        Class<?> clazz = Class.forName(sClazz);
+        Constructor<?> constructor = clazz.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        return constructor.newInstance();
+    }
+
+    /**
+     * 初始化 Bean，为单例 Bean 注入依赖
+     *
+     * @throws InvocationTargetException
+     * @throws IllegalAccessException
+     */
+    private void initialSingletonBeans() throws ReflectiveOperationException {
+        for (Map.Entry<String, Object> e : earlySingletonBeans.entrySet()) {
+            Object bean = e.getValue();
+            assignBean(e.getKey(), bean);
+            singletonBeans.put(e.getKey(), bean);
+        }
+    }
+
+    /**
+     * 为 Bean 对象属性赋值注入
+     *
+     * @param name Bean标识
+     * @param bean 对象
+     * @throws ReflectiveOperationException
+     */
+    private void assignBean(String name, Object bean) throws ReflectiveOperationException {
+        BeanDefinition bd = definitions.get(name);
+        if (bd == null) throw new NullPointerException("找不到 Bean 对象: " + name);
+        for (Map.Entry<String, String> e : bd.getProps().entrySet()) {
+            doSetter(bean, e.getKey(), e.getValue());
+        }
+        for (Map.Entry<String, String> e : bd.getReferenceProps().entrySet()) {
+            BeanDefinition ref = definitions.get(e.getValue());
+            if (ref == null) throw new NullPointerException(e.getKey() + " 找不到依赖 Bean 对象: " + e.getValue());
+            doSetter(bean, e.getKey(), ref);
         }
     }
 
@@ -131,16 +210,108 @@ public class BeanFactory {
         }
     }
 
+    /**
+     * 解析属性的 setter 方法名
+     *
+     * @param prop 属性名
+     * @return
+     */
+    private String resolveSetterName(String prop) {
+        StringBuilder kb = new StringBuilder(prop);
+        if (kb.charAt(0) >= 'a' && kb.charAt(0) <= 'z')
+            kb.setCharAt(0, (char) (kb.charAt(0) - 32));
+        kb.insert(0, "set");
+        return kb.toString();
+    }
+
+    /**
+     * 解析方法
+     *
+     * @param bean       对象
+     * @param methodName 方法名
+     * @return
+     */
+    private Method resolveMethod(Object bean, String methodName) {
+        Method setter = null;
+        for (Method m : bean.getClass().getMethods()) {
+            if (m.getName().equals(methodName)) {
+                setter = m;
+                break;
+            }
+        }
+        if (setter == null)
+            throw new RuntimeException("找不到" + bean.getClass().getName() + "的 setter 方法：" + methodName);
+        return setter;
+    }
+
+    /**
+     * 为 Bean 赋值
+     *
+     * @param bean  对象
+     * @param prop  属性名
+     * @param value 属性值
+     * @throws InvocationTargetException
+     * @throws IllegalAccessException
+     */
+    private void doSetter(Object bean, String prop, Object value) throws InvocationTargetException, IllegalAccessException {
+        String methodName = resolveSetterName(prop);
+        Method setter = resolveMethod(bean, methodName);
+        if (value instanceof String) {
+            value = converterService.convert(value, setter.getParameterTypes()[0]);
+        }
+        setter.invoke(bean, value);
+    }
+
     @SuppressWarnings("unchecked")
     public static <T> T getBean(String name) {
-        if (instance.beans.containsKey(name)) return (T) instance.beans.get(name);
-        return null;
+        BeanDefinition bd = instance.definitions.get(name);
+        if (bd == null) throw new IllegalStateException("找不到名为[" + name + "]的Bean！");
+        if (bd.getScope() == BeanScope.SINGLETON) {
+            return (T) instance.singletonBeans.get(name);
+        } else if (bd.getScope() == BeanScope.PROTOTYPE) {
+            try {
+                Object bean = instance.constructBean(bd.getClazz());
+                instance.assignBean(bd.getName(), bean);
+                return (T) bean;
+            } catch (ReflectiveOperationException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        throw new IllegalStateException("找不到名为[" + name + "]的Bean！");
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T> T getBean(Class<T> clazz) {
+        List<T> list = new ArrayList<>(4);
+        instance.singletonBeans.forEach((name, b) -> {
+            if (clazz.isInstance(b)) list.add((T) b);
+        });
+        if (list.size() == 0) {
+            ClassLoader classLoader = instance.getClass().getClassLoader();
+            for (Map.Entry<String, BeanDefinition> bde : instance.definitions.entrySet()) {
+                try {
+                    BeanDefinition bd = bde.getValue();
+                    Class<?> aClass = classLoader.loadClass(bd.getClazz());
+                    if (aClass.isAssignableFrom(clazz)) {
+                        Object bean = instance.constructBean(bd.getClazz());
+                        instance.assignBean(bd.getName(), bean);
+                        list.add((T) bean);
+                    }
+                } catch (ReflectiveOperationException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            if (list.size() == 0)
+                throw new IllegalStateException("找不到类型为[" + clazz.getName() + "]的Bean！");
+        }
+        if (list.size() != 1) throw new IllegalStateException("类型冲突，存在多个类型为[" + clazz.getName() + "]的Bean！");
+        return list.get(0);
     }
 
     @SuppressWarnings("unchecked")
     public static <T> Map<String, T> getBeansOfType(Class<T> clazz) {
         Map<String, T> map = new HashMap<>();
-        instance.beans.forEach((name, obj) -> {
+        instance.singletonBeans.forEach((name, obj) -> {
             if (clazz.isInstance(obj)) map.put(name, (T) obj);
         });
         return map;
