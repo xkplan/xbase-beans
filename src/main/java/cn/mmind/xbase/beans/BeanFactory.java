@@ -22,13 +22,14 @@ public class BeanFactory {
     private static final Object lock = new Object();
     private static final String BEANS_FILE_NAME = "beans.yml";
     private static volatile YamlConfiguration configuration;
-    private Map<String, Object> earlySingletonBeans = new HashMap<>();
-    private Map<String, Object> singletonBeans = new HashMap<>();
-    private Map<String, BeanDefinition> definitions = new HashMap<>();
-    private static BeanFactory instance = new BeanFactory();
-    private ConverterService converterService;
+    Map<String, Object> earlySingletonBeans = new HashMap<>();
+    Map<String, Object> singletonBeans = new HashMap<>();
+    Properties properties = new Properties();
+    //    Map<String, BeanDefinition> definitions = new HashMap<>();
+    //    private static BeanFactory instance = new BeanFactory();
+    ConverterService converterService;
 
-    private BeanFactory() {
+    protected BeanFactory() {
         converterService = new DefaultConverterService();
         converterService.addConverter(new String2BooleanConverter());
         converterService.addConverter(new String2ByteConverter());
@@ -92,7 +93,7 @@ public class BeanFactory {
             }
         }
         YamlConfiguration config = configuration;
-        ConfigurationSection beansSection = config.getConfigurationSection("beans");
+        ConfigurationSection beansSection = config.getConfigurationSection("cn/mmind/xbase/beans");
         if (beansSection != null) {
             for (String beanName : beansSection.getKeys(false)) {
                 BeanDefinition bd = new BeanDefinition();
@@ -129,9 +130,9 @@ public class BeanFactory {
                         Object bean = constructBean(sClazz);
                         earlySingletonBeans.put(bd.getName(), bean);
                     }
-                    if (definitions.containsKey(bd.getName()))
+                    /*if (definitions.containsKey(bd.getName()))
                         throw new IllegalStateException("Bean [" + bd.getName() + "] 已存在！");
-                    definitions.put(beanName, bd);
+                    definitions.put(beanName, bd);*/
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -146,9 +147,22 @@ public class BeanFactory {
      * @return
      * @throws ReflectiveOperationException
      */
-    private Object constructBean(String sClazz) throws ReflectiveOperationException {
+    protected Object constructBean(String sClazz) throws ReflectiveOperationException {
         Class<?> clazz = Class.forName(sClazz);
         Constructor<?> constructor = clazz.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        return constructor.newInstance();
+    }
+
+    /**
+     * 创建一个 Bean 空对象
+     *
+     * @param aClazz 类
+     * @return
+     * @throws ReflectiveOperationException
+     */
+    protected Object constructBean(Class<?> aClazz) throws ReflectiveOperationException {
+        Constructor<?> constructor = aClazz.getDeclaredConstructor();
         constructor.setAccessible(true);
         return constructor.newInstance();
     }
@@ -159,7 +173,7 @@ public class BeanFactory {
      * @throws InvocationTargetException
      * @throws IllegalAccessException
      */
-    private void initialSingletonBeans() throws ReflectiveOperationException {
+    protected void initialSingletonBeans() throws ReflectiveOperationException {
         for (Map.Entry<String, Object> e : earlySingletonBeans.entrySet()) {
             Object bean = e.getValue();
             assignBean(e.getKey(), bean);
@@ -175,7 +189,7 @@ public class BeanFactory {
      * @throws ReflectiveOperationException
      */
     private void assignBean(String name, Object bean) throws ReflectiveOperationException {
-        BeanDefinition bd = definitions.get(name);
+        /*BeanDefinition bd = definitions.get(name);
         if (bd == null) throw new NullPointerException("找不到 Bean 对象: " + name);
         for (Map.Entry<String, String> e : bd.getProps().entrySet()) {
             doSetter(bean, e.getKey(), e.getValue());
@@ -184,7 +198,7 @@ public class BeanFactory {
             BeanDefinition ref = definitions.get(e.getValue());
             if (ref == null) throw new NullPointerException(e.getKey() + " 找不到依赖 Bean 对象: " + e.getValue());
             doSetter(bean, e.getKey(), ref);
-        }
+        }*/
     }
 
     /**
@@ -263,38 +277,41 @@ public class BeanFactory {
     }
 
     @SuppressWarnings("unchecked")
-    public static <T> T getBean(String name) {
-        BeanDefinition bd = instance.definitions.get(name);
+    public <T> T getBean(String name) {
+        /*BeanDefinition bd = definitions.get(name);
         if (bd == null) throw new IllegalStateException("找不到名为[" + name + "]的Bean！");
         if (bd.getScope() == BeanScope.SINGLETON) {
-            return (T) instance.singletonBeans.get(name);
+            return (T) singletonBeans.get(name);
         } else if (bd.getScope() == BeanScope.PROTOTYPE) {
             try {
-                Object bean = instance.constructBean(bd.getClazz());
-                instance.assignBean(bd.getName(), bean);
+                Object bean = constructBean(bd.getClazz());
+                assignBean(bd.getName(), bean);
                 return (T) bean;
             } catch (ReflectiveOperationException e) {
                 throw new RuntimeException(e);
             }
+        }*/
+        if (singletonBeans.containsKey(name)) {
+            return (T) singletonBeans.get(name);
         }
         throw new IllegalStateException("找不到名为[" + name + "]的Bean！");
     }
 
     @SuppressWarnings("unchecked")
-    public static <T> T getBean(Class<T> clazz) {
+    public <T> T getBean(Class<T> clazz) {
         List<T> list = new ArrayList<>(4);
-        instance.singletonBeans.forEach((name, b) -> {
+        singletonBeans.forEach((name, b) -> {
             if (clazz.isInstance(b)) list.add((T) b);
         });
-        if (list.size() == 0) {
-            ClassLoader classLoader = instance.getClass().getClassLoader();
-            for (Map.Entry<String, BeanDefinition> bde : instance.definitions.entrySet()) {
+        /*if (list.size() == 0) {
+            ClassLoader classLoader = getClass().getClassLoader();
+            for (Map.Entry<String, BeanDefinition> bde : definitions.entrySet()) {
                 try {
                     BeanDefinition bd = bde.getValue();
                     Class<?> aClass = classLoader.loadClass(bd.getClazz());
                     if (aClass.isAssignableFrom(clazz)) {
-                        Object bean = instance.constructBean(bd.getClazz());
-                        instance.assignBean(bd.getName(), bean);
+                        Object bean = constructBean(bd.getClazz());
+                        assignBean(bd.getName(), bean);
                         list.add((T) bean);
                     }
                 } catch (ReflectiveOperationException e) {
@@ -303,15 +320,15 @@ public class BeanFactory {
             }
             if (list.size() == 0)
                 throw new IllegalStateException("找不到类型为[" + clazz.getName() + "]的Bean！");
-        }
+        }*/
         if (list.size() != 1) throw new IllegalStateException("类型冲突，存在多个类型为[" + clazz.getName() + "]的Bean！");
         return list.get(0);
     }
 
     @SuppressWarnings("unchecked")
-    public static <T> Map<String, T> getBeansOfType(Class<T> clazz) {
+    public <T> Map<String, T> getBeansOfType(Class<T> clazz) {
         Map<String, T> map = new HashMap<>();
-        instance.singletonBeans.forEach((name, obj) -> {
+        singletonBeans.forEach((name, obj) -> {
             if (clazz.isInstance(obj)) map.put(name, (T) obj);
         });
         return map;
