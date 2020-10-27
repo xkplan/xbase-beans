@@ -8,6 +8,7 @@ public class BeanDefinition {
     private BeanScope scope = BeanScope.SINGLETON;
     private Map<String, String> props;
     private Map<String, String> referenceProps;
+    private String postConstruct;
 
     public String getClazz() {
         return clazz;
@@ -47,5 +48,13 @@ public class BeanDefinition {
 
     public void setReferenceProps(Map<String, String> referenceProps) {
         this.referenceProps = referenceProps;
+    }
+
+    public String getPostConstruct() {
+        return postConstruct;
+    }
+
+    public void setPostConstruct(String postConstruct) {
+        this.postConstruct = postConstruct;
     }
 }

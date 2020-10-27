@@ -14,6 +14,7 @@ import java.net.URLClassLoader;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 暂不支持 prototype 类型的 bean
@@ -22,10 +23,10 @@ public class BeanFactory {
     private static final Object lock = new Object();
     private static final String BEANS_FILE_NAME = "beans.yml";
     private static volatile YamlConfiguration configuration;
-    Map<String, Object> earlySingletonBeans = new HashMap<>();
-    Map<String, Object> singletonBeans = new HashMap<>();
+    Map<String, Object> earlySingletonBeans = new ConcurrentHashMap<>();
+    Map<String, Object> singletonBeans = new ConcurrentHashMap<>();
     Properties properties = new Properties();
-    //    Map<String, BeanDefinition> definitions = new HashMap<>();
+    Map<String, BeanDefinition> definitions = new HashMap<>();
     //    private static BeanFactory instance = new BeanFactory();
     ConverterService converterService;
 
@@ -303,8 +304,8 @@ public class BeanFactory {
         singletonBeans.forEach((name, b) -> {
             if (clazz.isInstance(b)) list.add((T) b);
         });
-        /*if (list.size() == 0) {
-            ClassLoader classLoader = getClass().getClassLoader();
+        if (list.size() == 0) {
+            /*ClassLoader classLoader = getClass().getClassLoader();
             for (Map.Entry<String, BeanDefinition> bde : definitions.entrySet()) {
                 try {
                     BeanDefinition bd = bde.getValue();
@@ -318,9 +319,9 @@ public class BeanFactory {
                     throw new RuntimeException(e);
                 }
             }
-            if (list.size() == 0)
-                throw new IllegalStateException("找不到类型为[" + clazz.getName() + "]的Bean！");
-        }*/
+            if (list.size() == 0)*/
+            throw new IllegalStateException("找不到类型为[" + clazz.getName() + "]的Bean！");
+        }
         if (list.size() != 1) throw new IllegalStateException("类型冲突，存在多个类型为[" + clazz.getName() + "]的Bean！");
         return list.get(0);
     }

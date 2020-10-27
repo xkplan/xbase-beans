@@ -7,6 +7,8 @@ import java.io.FileFilter;
 import java.io.IOException;
 import java.net.JarURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLDecoder;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.Set;
@@ -17,19 +19,22 @@ public class ReflectUtil {
     /**
      * 获取某个包下的所有类
      */
-    public static Set<Class<?>> getClasses(String packageName) throws IOException {
+    public static Set<Class<?>> getClasses(Class<?> clazz) throws IOException {
         Set<Class<?>> classSet = new HashSet<>();
-        Enumeration<URL> urls = Thread.currentThread().getContextClassLoader().getResources(packageName.replace(".", "/"));
+        Enumeration<URL> urls = clazz.getClassLoader().getResources(clazz.getPackage().getName().replace(".", "/"));
         while (urls.hasMoreElements()) {
             URL url = urls.nextElement();
             if (url != null) {
                 String protocol = url.getProtocol();
                 if (protocol.equals("file")) {
-                    String packagePath = url.getPath().replaceAll("%20", " ");
+                    String packagePath = URLDecoder.decode(url.getPath(), "UTF-8");
+                    String packageName = clazz.getName();
+                    packageName = packageName.substring(0, packageName.lastIndexOf(".")).replaceAll("/", ".");
                     addClass(classSet, packagePath, packageName);
                 } else if (protocol.equals("jar")) {
                     JarURLConnection jarURLConnection = (JarURLConnection) url.openConnection();
                     if (jarURLConnection != null) {
+                        jarURLConnection.setUseCaches(false);
                         JarFile jarFile = jarURLConnection.getJarFile();
                         if (jarFile != null) {
                             Enumeration<JarEntry> jarEntries = jarFile.entries();

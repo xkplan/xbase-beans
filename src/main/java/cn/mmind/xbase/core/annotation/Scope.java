@@ -5,5 +5,5 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
 public @interface Scope {
-    String scopeName() default "singleton";
+    String value() default "singleton";
 }
