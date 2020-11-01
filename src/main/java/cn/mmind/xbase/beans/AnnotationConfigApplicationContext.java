@@ -227,12 +227,12 @@ public class AnnotationConfigApplicationContext extends BeanFactory {
     }
 
     @SuppressWarnings("unchecked")
-    protected <T> T getEarlyBean(String name) {
+    private <T> T getEarlyBean(String name) {
         return (T) earlySingletonBeans.get(name);
     }
 
     @SuppressWarnings("unchecked")
-    protected <T> T getEarlyBean(Class<T> clazz) {
+    private <T> T getEarlyBean(Class<T> clazz) {
         List<T> list = new ArrayList<>(4);
         earlySingletonBeans.forEach((name, b) -> {
             if (clazz.isInstance(b)) list.add((T) b);
@@ -243,7 +243,7 @@ public class AnnotationConfigApplicationContext extends BeanFactory {
     }
 
     @SuppressWarnings("unchecked")
-    public <T> Map<String, T> getEarlyBeansOfType(Class<T> clazz) {
+    private <T> Map<String, T> getEarlyBeansOfType(Class<T> clazz) {
         Map<String, T> map = new HashMap<>();
         earlySingletonBeans.forEach((name, obj) -> {
             if (clazz.isInstance(obj)) map.put(name, (T) obj);
