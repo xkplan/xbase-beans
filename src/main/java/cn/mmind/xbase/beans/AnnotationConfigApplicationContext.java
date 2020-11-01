@@ -5,6 +5,7 @@ import cn.mmind.xbase.core.annotation.*;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
+import javax.annotation.PostConstruct;
 import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -53,6 +54,13 @@ public class AnnotationConfigApplicationContext extends BeanFactory {
                 BeanScope beanScope = BeanScope.SINGLETON;
                 if (scope != null && !"singleton".equalsIgnoreCase(scope.value())) beanScope = BeanScope.PROTOTYPE;
                 bd.setScope(beanScope);
+                //读取后置处理器
+                for (Method m : aClass.getDeclaredMethods()) {
+                    if (m.isAnnotationPresent(PostConstruct.class)) {
+                        bd.setPostConstruct(m.getName());
+                        break;
+                    }
+                }
                 if (definitions.containsKey(name)) throw new IllegalStateException("已存在名为 " + name + " 的 bean");
                 localDefinitions.put(name, bd);
                 definitions.put(name, bd);
@@ -75,6 +83,7 @@ public class AnnotationConfigApplicationContext extends BeanFactory {
             //执行后置处理器方法
             localDefinitions.forEach((s, bd) -> {
                 if (bd.getScope() == BeanScope.SINGLETON) {
+                    if (bd.getPostConstruct() == null) return;
                     try {
                         Object bean = singletonBeans.get(bd.getName());
                         Method postMethod = bean.getClass().getDeclaredMethod(bd.getPostConstruct());
