@@ -36,7 +36,7 @@ public class AnnotationConfigApplicationContext extends BeanFactory {
             Set<Class<?>> classes = ReflectUtil.getClasses(clazz);
             Map<String, BeanDefinition> localDefinitions = new HashMap<>();
             //加载配置类
-            doLoadConfiguration(classes.stream().filter(aClass -> aClass.isAnnotationPresent(Configuration.class))
+            doLoadConfigurationClass(classes.stream().filter(aClass -> aClass.isAnnotationPresent(Configuration.class))
                     .collect(Collectors.toList()), localDefinitions);
             //加载所有 Component，读取 BeanDefinition
             classes.stream().filter(aClass -> aClass.isAnnotationPresent(Component.class) ||
@@ -125,7 +125,7 @@ public class AnnotationConfigApplicationContext extends BeanFactory {
         }
     }
 
-    private void doLoadConfiguration(List<Class<?>> classes, Map<String, BeanDefinition> localDefinitions) {
+    private void doLoadConfigurationClass(List<Class<?>> classes, Map<String, BeanDefinition> localDefinitions) {
         classes.forEach(aClass -> {
             if (aClass.isAnnotationPresent(Configuration.class)) {
                 try {
@@ -139,18 +139,19 @@ public class AnnotationConfigApplicationContext extends BeanFactory {
                                 name = aClass.getSimpleName();
                                 name = name.substring(0, 1).toLowerCase() + name.substring(1);
                             } else name = ab.value();
+                            method.setAccessible(true);
                             Object bean = method.invoke(obj);
                             if (bean != null) {
-                                BeanDefinition bd = new BeanDefinition();
-                                bd.setName(name);
-                                bd.setClazz(bean.getClass().getName());
-                                bd.setScope(BeanScope.SINGLETON);
+//                                BeanDefinition bd = new BeanDefinition();
+//                                bd.setName(name);
+//                                bd.setClazz(bean.getClass().getName());
+//                                bd.setScope(BeanScope.SINGLETON);
                                 if (definitions.containsKey(name)) {
                                     System.out.println("已存在名为 " + name + " 的 bean");
                                     continue;
                                 }
-                                localDefinitions.put(name, bd);
-                                definitions.put(name, bd);
+//                                localDefinitions.put(name, bd);
+//                                definitions.put(name, bd);
                                 earlySingletonBeans.put(name, bean);
                                 singletonBeans.put(name, bean);
                             }
