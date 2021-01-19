@@ -1,7 +1,7 @@
 package cn.mmind.xbase.beans;
 
 import cn.mmind.xbase.beans.converter.ConverterService;
-import cn.mmind.xbase.beans.converter.support.*;
+import cn.mmind.xbase.beans.converter.support.DefaultConverterService;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
@@ -32,13 +32,6 @@ public class BeanFactory {
 
     protected BeanFactory() {
         converterService = new DefaultConverterService();
-        converterService.addConverter(new String2BooleanConverter());
-        converterService.addConverter(new String2ByteConverter());
-        converterService.addConverter(new String2ShortConverter());
-        converterService.addConverter(new String2IntConverter());
-        converterService.addConverter(new String2LongConverter());
-        converterService.addConverter(new String2FloatConverter());
-        converterService.addConverter(new String2DoubleConverter());
         //获取运行目录
         String path = BeanFactory.class.getProtectionDomain().getCodeSource().getLocation().getFile();
         File jarFile;
@@ -145,8 +138,6 @@ public class BeanFactory {
      * 创建一个 Bean 空对象
      *
      * @param sClazz 全类名
-     * @return
-     * @throws ReflectiveOperationException
      */
     protected Object constructBean(String sClazz) throws ReflectiveOperationException {
         Class<?> clazz = Class.forName(sClazz);
@@ -159,8 +150,6 @@ public class BeanFactory {
      * 创建一个 Bean 空对象
      *
      * @param aClazz 类
-     * @return
-     * @throws ReflectiveOperationException
      */
     protected Object constructBean(Class<?> aClazz) throws ReflectiveOperationException {
         Constructor<?> constructor = aClazz.getDeclaredConstructor();
@@ -170,9 +159,6 @@ public class BeanFactory {
 
     /**
      * 初始化 Bean，为单例 Bean 注入依赖
-     *
-     * @throws InvocationTargetException
-     * @throws IllegalAccessException
      */
     protected void initialSingletonBeans() throws ReflectiveOperationException {
         for (Map.Entry<String, Object> e : earlySingletonBeans.entrySet()) {
@@ -187,7 +173,6 @@ public class BeanFactory {
      *
      * @param name Bean标识
      * @param bean 对象
-     * @throws ReflectiveOperationException
      */
     private void assignBean(String name, Object bean) throws ReflectiveOperationException {
         /*BeanDefinition bd = definitions.get(name);
@@ -229,7 +214,6 @@ public class BeanFactory {
      * 解析属性的 setter 方法名
      *
      * @param prop 属性名
-     * @return
      */
     private String resolveSetterName(String prop) {
         StringBuilder kb = new StringBuilder(prop);
@@ -244,7 +228,6 @@ public class BeanFactory {
      *
      * @param bean       对象
      * @param methodName 方法名
-     * @return
      */
     private Method resolveMethod(Object bean, String methodName) {
         Method setter = null;
@@ -265,8 +248,6 @@ public class BeanFactory {
      * @param bean  对象
      * @param prop  属性名
      * @param value 属性值
-     * @throws InvocationTargetException
-     * @throws IllegalAccessException
      */
     private void doSetter(Object bean, String prop, Object value) throws InvocationTargetException, IllegalAccessException {
         String methodName = resolveSetterName(prop);

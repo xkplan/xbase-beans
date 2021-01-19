@@ -11,6 +11,16 @@ public class DefaultConverterService implements ConverterService {
     private LinkedHashSet<Converter> converters = new LinkedHashSet<>();
     private Map<String, Converter> convertersCache = new HashMap<>();
 
+    public DefaultConverterService() {
+        addConverter(new String2BooleanConverter());
+        addConverter(new String2ByteConverter());
+        addConverter(new String2ShortConverter());
+        addConverter(new String2IntConverter());
+        addConverter(new String2LongConverter());
+        addConverter(new String2FloatConverter());
+        addConverter(new String2DoubleConverter());
+    }
+
     @Override
     public void addConverter(Converter<?, ?> converter) {
         if (converter != null) converters.add(converter);
