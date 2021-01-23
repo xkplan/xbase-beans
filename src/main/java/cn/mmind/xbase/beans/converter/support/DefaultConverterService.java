@@ -3,6 +3,7 @@ package cn.mmind.xbase.beans.converter.support;
 import cn.mmind.xbase.beans.converter.Converter;
 import cn.mmind.xbase.beans.converter.ConverterService;
 
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -40,7 +41,9 @@ public class DefaultConverterService implements ConverterService {
         Converter<?, T> converter = getConverter(source.getClass(), targetType);
         if (converter == null) return null;
         try {
-            return (T) converter.getClass().getDeclaredMethod("convert", Object.class).invoke(converter, source);
+            final Method method = converter.getClass().getDeclaredMethod("convert", Object.class);
+            method.setAccessible(true);
+            return (T) method.invoke(converter, source);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
